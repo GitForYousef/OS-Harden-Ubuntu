@@ -1,0 +1,75 @@
+---
+- name: Remediate PAM password reuse and account lockout
+  hosts: all
+  connection: local
+  become: true
+
+  tasks:
+
+    # ============================================================
+    # 1. Limit password reuse
+    # CIS/Tenable: remember previous 5 passwords
+    # ============================================================
+
+    - name: Configure password history
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/common-password
+        regexp: '^\s*password\s+(requisite|required|sufficient)\s+pam_pwhistory\.so'
+        line: 'password requisite pam_pwhistory.so remember=5 use_authtok'
+        insertafter: '^password.*pam_unix\.so'
+        backup: true
+
+
+    # ============================================================
+    # 2. Lock account after failed password attempts
+    # CIS/Tenable: deny after 5 failures
+    # ============================================================
+
+    - name: Configure faillock preauth
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/common-auth
+        regexp: '^\s*auth\s+required\s+pam_faillock\.so\s+preauth'
+        line: 'auth required pam_faillock.so preauth silent deny=5 fail_interval=900'
+        insertafter: '^auth.*pam_unix\.so'
+        backup: true
+
+
+    - name: Configure faillock authentication failure
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/common-auth
+        regexp: '^\s*auth\s+\[default=die\]\s+pam_faillock\.so\s+authfail'
+        line: 'auth [default=die] pam_faillock.so authfail deny=5 fail_interval=900'
+        insertafter: 'pam_unix\.so'
+        backup: true
+
+
+    # ============================================================
+    # 3 & 4. Lockout interval and unlock time
+    # ============================================================
+
+    - name: Configure faillock unlock time
+      ansible.builtin.lineinfile:
+        path: /etc/security/faillock.conf
+        regexp: '^\s*unlock_time\s*='
+        line: 'unlock_time = 900'
+        create: true
+        mode: '0644'
+        backup: true
+
+
+    - name: Configure faillock failure interval
+      ansible.builtin.lineinfile:
+        path: /etc/security/faillock.conf
+        regexp: '^\s*fail_interval\s*='
+        line: 'fail_interval = 900'
+        create: true
+        mode: '0644'
+
+
+    - name: Configure faillock deny count
+      ansible.builtin.lineinfile:
+        path: /etc/security/faillock.conf
+        regexp: '^\s*deny\s*='
+        line: 'deny = 5'
+        create: true
+        mode: '0644'
