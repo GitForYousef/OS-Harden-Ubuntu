@@ -1,7 +1,6 @@
 ---
 - name: Remediate PAM password reuse and account lockout
   hosts: all
-  connection: local
   become: true
 
   tasks:
