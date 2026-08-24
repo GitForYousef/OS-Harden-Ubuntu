@@ -105,12 +105,14 @@
       ansible.builtin.assert:
         that:
           - firewire_config_check.rc == 0
-          - "'install firewire-core /bin/false' in firewire_config_check.stdout"
-          - "'blacklist firewire-core' in firewire_config_check.stdout"
+          - firewire_config_check.stdout is search('install firewire[_-]core /bin/false')
+          - firewire_config_check.stdout is search('blacklist firewire[_-]core')
         fail_msg: >-
           firewire-core is not correctly blacklisted/disabled.
+          Actual configuration:
+          {{ firewire_config_check.stdout }}
         success_msg: >-
-          firewire-core is blacklisted and module loading is disabled.
+          firewire-core is correctly blacklisted and module loading is disabled.
 
     ###########################################################################
     # 9. Display final result
