@@ -1,0 +1,60 @@
+---
+- name: Fix CIS 1.7.2 Login Banners
+  hosts: all
+  become: true
+  gather_facts: false
+
+  vars:
+    login_banner: "Authorized users only. All activity may be monitored and reported."
+
+  tasks:
+
+    - name: Configure local login banner
+      ansible.builtin.copy:
+        dest: /etc/issue
+        content: "{{ login_banner }}\n"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Configure SSH login banner
+      ansible.builtin.copy:
+        dest: /etc/issue.net
+        content: "{{ login_banner }}\n"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Configure SSH Banner directive
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^[#[:space:]]*Banner[[:space:]]+'
+        line: 'Banner /etc/issue.net'
+        insertbefore: '^Include|^Match'
+        backup: true
+      notify: Reload sshd
+
+    - name: Validate sshd configuration
+      ansible.builtin.command:
+        cmd: sshd -t
+      changed_when: false
+
+    - name: Verify effective SSH banner
+      ansible.builtin.command:
+        cmd: sshd -T
+      register: sshd_effective_config
+      changed_when: false
+
+    - name: Confirm effective banner configuration
+      ansible.builtin.assert:
+        that:
+          - "'banner /etc/issue.net' in sshd_effective_config.stdout"
+        fail_msg: "Effective SSH configuration does not contain 'banner /etc/issue.net'."
+        success_msg: "SSH banner is correctly configured."
+
+  handlers:
+
+    - name: Reload sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: reloaded
