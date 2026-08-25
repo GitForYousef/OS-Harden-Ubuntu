@@ -1,0 +1,64 @@
+---
+- name: CIS 1.1.1.9 - Ensure usb-storage kernel module is not available
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    - name: Check if usb-storage module is currently loaded
+      ansible.builtin.shell: |
+        lsmod | awk '$1 == "usb_storage" {print $1}'
+      register: usb_storage_loaded
+      changed_when: false
+
+    - name: Unload usb-storage kernel module
+      ansible.builtin.command:
+        cmd: modprobe -r usb-storage
+      when: usb_storage_loaded.stdout == "usb_storage"
+      failed_when: false
+
+    - name: Remove usb-storage module using rmmod if still loaded
+      ansible.builtin.command:
+        cmd: rmmod usb_storage
+      when: usb_storage_loaded.stdout == "usb_storage"
+      failed_when: false
+
+    - name: Create modprobe configuration for usb-storage
+      ansible.builtin.copy:
+        dest: /etc/modprobe.d/60-usb-storage.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          install usb_storage /bin/false
+          blacklist usb_storage
+
+    - name: Update initramfs
+      ansible.builtin.command:
+        cmd: update-initramfs -u
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Check usb-storage module status
+      ansible.builtin.shell: |
+        lsmod | awk '$1 == "usb_storage" {print $1}'
+      register: usb_storage_check
+      changed_when: false
+
+    - name: Verify usb-storage is not loaded
+      ansible.builtin.assert:
+        that:
+          - usb_storage_check.stdout == ""
+        fail_msg: "usb-storage module is still loaded."
+        success_msg: "usb-storage module is not loaded."
+
+    - name: Verify usb-storage deny configuration
+      ansible.builtin.shell: |
+        grep -E '^[[:space:]]*(install usb_storage /bin/false|blacklist usb_storage)[[:space:]]*$' \
+        /etc/modprobe.d/60-usb-storage.conf
+      register: usb_storage_config
+      changed_when: false
+
+    - name: Display usb-storage configuration
+      ansible.builtin.debug:
+        var: usb_storage_config.stdout_lines
