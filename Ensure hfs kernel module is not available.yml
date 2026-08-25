@@ -1,0 +1,64 @@
+---
+- name: CIS 1.1.1.3 - Ensure hfs kernel module is not available
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    - name: Check if hfs module is currently loaded
+      ansible.builtin.shell: |
+        lsmod | awk '$1 == "hfs" {print $1}'
+      register: hfs_loaded
+      changed_when: false
+
+    - name: Unload hfs kernel module
+      ansible.builtin.command:
+        cmd: modprobe -r hfs
+      when: hfs_loaded.stdout == "hfs"
+      failed_when: false
+
+    - name: Remove hfs kernel module using rmmod if still loaded
+      ansible.builtin.command:
+        cmd: rmmod hfs
+      when: hfs_loaded.stdout == "hfs"
+      failed_when: false
+
+    - name: Create modprobe configuration for hfs
+      ansible.builtin.copy:
+        dest: /etc/modprobe.d/60-hfs.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          install hfs /bin/false
+          blacklist hfs
+
+    - name: Update initramfs
+      ansible.builtin.command:
+        cmd: update-initramfs -u
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Check hfs module status
+      ansible.builtin.shell: |
+        lsmod | awk '$1 == "hfs" {print $1}'
+      register: hfs_check
+      changed_when: false
+
+    - name: Verify hfs is not loaded
+      ansible.builtin.assert:
+        that:
+          - hfs_check.stdout == ""
+        fail_msg: "hfs module is still loaded."
+        success_msg: "hfs module is not loaded."
+
+    - name: Verify hfs deny configuration
+      ansible.builtin.shell: |
+        grep -E '^[[:space:]]*(install hfs /bin/false|blacklist hfs)[[:space:]]*$' \
+        /etc/modprobe.d/60-hfs.conf
+      register: hfs_config
+      changed_when: false
+
+    - name: Display hfs configuration
+      ansible.builtin.debug:
+        var: hfs_config.stdout_lines
