@@ -1,0 +1,49 @@
+---
+- name: CIS 3.3.2.6 - Configure IPv6 default accept_source_route
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    - name: Ensure /etc/sysctl.d exists
+      ansible.builtin.file:
+        path: /etc/sysctl.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Configure IPv6 default accept_source_route
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/60-ipv6_sysctl.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # CIS 3.3.2.6
+          net.ipv6.conf.default.accept_source_route = 0
+      notify: Reload sysctl
+
+    - name: Set runtime value
+      ansible.builtin.sysctl:
+        name: net.ipv6.conf.default.accept_source_route
+        value: '0'
+        state: present
+        reload: true
+
+    - name: Verify runtime value
+      ansible.builtin.command:
+        cmd: sysctl net.ipv6.conf.default.accept_source_route
+      register: ipv6_default_source_route
+      changed_when: false
+
+    - name: Display verification
+      ansible.builtin.debug:
+        msg: "{{ ipv6_default_source_route.stdout }}"
+
+  handlers:
+
+    - name: Reload sysctl
+      ansible.builtin.command:
+        cmd: sysctl --system
