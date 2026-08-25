@@ -1,0 +1,25 @@
+---
+- name: Disable freevxfs kernel module
+  hosts: all
+  become: true
+
+  tasks:
+
+    - name: Unload freevxfs module
+      ansible.builtin.command: modprobe -r freevxfs
+      failed_when: false
+      changed_when: false
+
+    - name: Create freevxfs modprobe configuration
+      ansible.builtin.copy:
+        dest: /etc/modprobe.d/60-freevxfs.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          install freevxfs /bin/false
+          blacklist freevxfs
+
+    - name: Run depmod
+      ansible.builtin.command: depmod -a
+      changed_when: false
