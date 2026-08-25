@@ -1,0 +1,64 @@
+---
+- name: CIS 1.1.1.4 - Ensure hfsplus kernel module is not available
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    - name: Check if hfsplus module is currently loaded
+      ansible.builtin.shell: |
+        lsmod | awk '$1 == "hfsplus" {print $1}'
+      register: hfsplus_loaded
+      changed_when: false
+
+    - name: Unload hfsplus kernel module
+      ansible.builtin.command:
+        cmd: modprobe -r hfsplus
+      when: hfsplus_loaded.stdout == "hfsplus"
+      failed_when: false
+
+    - name: Remove hfsplus kernel module using rmmod if still loaded
+      ansible.builtin.command:
+        cmd: rmmod hfsplus
+      when: hfsplus_loaded.stdout == "hfsplus"
+      failed_when: false
+
+    - name: Create modprobe configuration for hfsplus
+      ansible.builtin.copy:
+        dest: /etc/modprobe.d/60-hfsplus.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          install hfsplus /bin/false
+          blacklist hfsplus
+
+    - name: Update initramfs
+      ansible.builtin.command:
+        cmd: update-initramfs -u
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Check hfsplus module status
+      ansible.builtin.shell: |
+        lsmod | awk '$1 == "hfsplus" {print $1}'
+      register: hfsplus_check
+      changed_when: false
+
+    - name: Verify hfsplus is not loaded
+      ansible.builtin.assert:
+        that:
+          - hfsplus_check.stdout == ""
+        fail_msg: "hfsplus module is still loaded."
+        success_msg: "hfsplus module is not loaded."
+
+    - name: Verify hfsplus deny configuration
+      ansible.builtin.shell: |
+        grep -E '^[[:space:]]*(install hfsplus /bin/false|blacklist hfsplus)[[:space:]]*$' \
+        /etc/modprobe.d/60-hfsplus.conf
+      register: hfsplus_config
+      changed_when: false
+
+    - name: Display hfsplus configuration
+      ansible.builtin.debug:
+        var: hfsplus_config.stdout_lines
