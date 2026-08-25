@@ -1,0 +1,59 @@
+---
+- name: CIS 1.3.1.2 - Ensure AppArmor is enabled
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    - name: Remove apparmor=0 from /etc/default/grub
+      ansible.builtin.replace:
+        path: /etc/default/grub
+        regexp: '(\s*)apparmor=0(\s*)'
+        replace: '\1\2'
+      notify: Update GRUB
+
+    - name: Find GRUB configuration files in /etc/default/grub.d
+      ansible.builtin.find:
+        paths: /etc/default/grub.d
+        patterns:
+          - "*.cfg"
+        file_type: file
+      register: grub_d_files
+
+    - name: Remove apparmor=0 from grub.d configuration files
+      ansible.builtin.replace:
+        path: "{{ item.path }}"
+        regexp: '(\s*)apparmor=0(\s*)'
+        replace: '\1\2'
+      loop: "{{ grub_d_files.files }}"
+      notify: Update GRUB
+
+    - name: Ensure AppArmor packages are installed
+      ansible.builtin.apt:
+        name:
+          - apparmor
+          - apparmor-utils
+        state: present
+        update_cache: true
+
+    - name: Ensure AppArmor service is enabled and started
+      ansible.builtin.systemd:
+        name: apparmor
+        enabled: true
+        state: started
+
+    - name: Check current AppArmor status
+      ansible.builtin.command: aa-status
+      register: apparmor_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display AppArmor status
+      ansible.builtin.debug:
+        var: apparmor_status.stdout_lines
+
+  handlers:
+
+    - name: Update GRUB
+      ansible.builtin.command: update-grub
