@@ -1,0 +1,25 @@
+---
+- name: Disable cramfs kernel module
+  hosts: all
+  become: true
+
+  tasks:
+
+    - name: Unload cramfs module
+      ansible.builtin.command: modprobe -r cramfs
+      failed_when: false
+      changed_when: false
+
+    - name: Create cramfs modprobe configuration
+      ansible.builtin.copy:
+        dest: /etc/modprobe.d/60-cramfs.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          install cramfs /bin/false
+          blacklist cramfs
+
+    - name: Run depmod
+      ansible.builtin.command: depmod -a
+      changed_when: false
